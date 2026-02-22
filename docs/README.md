@@ -8,8 +8,8 @@ This app is deployed as a **Streamlit app inside Snowflake** (no local setup req
 
 ### Use the viewer login provided
 
-1) Log in to Snowflake using:
-- **Account / Server URL:** NDCPYYH-ODC36169.snowflakecomputing.com  
+1) Log in to Snowflake using: 
+- **Account / Server URL:** [NDCPYYH-ODC36169.snowflakecomputing.com](https://ndcpyyh-odc36169.snowflakecomputing.com/)  
 - **Username:** APP_REVIEWER  
 - **Password:** snowflakeai!  
 - **Role:** APP_VIEWER_ROLE  
