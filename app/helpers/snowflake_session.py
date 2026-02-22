@@ -9,8 +9,16 @@ Usage:
 
 import os
 
-from dotenv import load_dotenv
-load_dotenv()  # loads .env if present; no-op in Snowflake Streamlit
+
+def _maybe_load_dotenv():
+    """
+    Loads .env locally if python-dotenv exists.
+    """
+    try:
+        from dotenv import load_dotenv  # type: ignore
+        load_dotenv()
+    except Exception:
+        pass
 
 
 def get_session():
@@ -20,35 +28,34 @@ def get_session():
     - Inside Streamlit-in-Snowflake: uses get_active_session().
     - Locally: creates a Session from SNOWFLAKE_* env vars.
     """
-    # Try Streamlit-in-Snowflake first
+    # 1) Streamlit-in-Snowflake path
     try:
         from snowflake.snowpark.context import get_active_session
         return get_active_session()
     except Exception:
         pass
 
-    # Local fallback: build session from env vars
+    # 2) Local path
+    _maybe_load_dotenv()
+
     from snowflake.snowpark import Session
 
-    account = os.environ["SNOWFLAKE_ACCOUNT"]
-    user = os.environ["SNOWFLAKE_USER"]
-    authenticator = os.environ.get("SNOWFLAKE_AUTHENTICATOR", "")
-
     connection_params = {
-        "account": account,
-        "user": user,
+        "account": os.environ["SNOWFLAKE_ACCOUNT"],
+        "user": os.environ["SNOWFLAKE_USER"],
         "role": os.environ.get("SNOWFLAKE_ROLE", "ACCOUNTADMIN"),
         "warehouse": os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
         "database": os.environ.get("SNOWFLAKE_DATABASE", "SNOWFLAKE_LEARNING_DB"),
         "schema": os.environ.get("SNOWFLAKE_SCHEMA", "PUBLIC"),
     }
 
-    # Optional: explicit host override
+    # Optional host override
     host = os.environ.get("SNOWFLAKE_HOST")
     if host:
         connection_params["host"] = host
 
     # Auth strategy
+    authenticator = os.environ.get("SNOWFLAKE_AUTHENTICATOR", "").strip().lower()
     if authenticator == "externalbrowser":
         connection_params["authenticator"] = "externalbrowser"
     else:
