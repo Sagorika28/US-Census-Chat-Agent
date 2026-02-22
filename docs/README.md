@@ -2,6 +2,23 @@
 
 A chat-based agent that answers US Census questions using the Snowflake Marketplace dataset **US Open Census Data & Neighborhood Insights (Free Dataset)**. The agent writes SQL against curated gold views, validates it, executes it, and synthesizes a natural-language answer.
 
+## Demo / Access (Snowflake Streamlit)
+
+This app is deployed as a **Streamlit app inside Snowflake** (no local setup required).
+
+### Option A (Preferred): Use the viewer login provided
+1) Open the app link (viewer mode):
+- https://app.snowflake.com/streamlit/us-east-1/zcc13934/#/apps/w4jolvua4louq7emdedh
+
+2) Log in to Snowflake using:
+- **Account / Server URL:** NDCPYYH-ODC36169.snowflakecomputing.com  
+- **Username:** APP_REVIEWER  
+- **Password:** snowflakeai!  
+- **Role:** APP_VIEWER_ROLE  
+- **Warehouse:** COMPUTE_WH  
+
+- The app queries read-only curated views from `SNOWFLAKE_LEARNING_DB.PUBLIC`.
+
 ## How the agent works
 
 ```
