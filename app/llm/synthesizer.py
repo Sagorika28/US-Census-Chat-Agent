@@ -77,32 +77,53 @@ def _fallback_summary(df: pd.DataFrame, year: int) -> str:
         return f"No results found for {year}."
 
     r = df.iloc[0]
-    cols = [c.lower() for c in df.columns]
+    cols_lower = [c.lower() for c in df.columns]
 
-    # Try to produce a meaningful summary based on available columns
-    if "pct_over_30" in cols:
+    # Try to produce a meaningful summary based on available columns (checking both raw names and aliases)
+    if "pct_over_30" in cols_lower or any("rent" in c for c in cols_lower):
+        county_col = next((c for c in df.columns if c.lower() == "county"), "?")
+        state_col = next((c for c in df.columns if c.lower() == "state"), "?")
+        val_col = next((c for c in df.columns if "30" in c.lower()), "?")
+        val = r.get(val_col, 0)
+        
         return (
             f"Highest rent-burden area in {year}: "
-            f"{r.get('COUNTY', r.get('county', '?'))}, {r.get('STATE', r.get('state', '?'))} — "
-            f"{float(r.get('PCT_OVER_30', r.get('pct_over_30', 0))):.1%} of renters pay 30%+ on rent."
+            f"{r.get(county_col, '?')}, {r.get(state_col, '?')} — "
+            f"{float(val):.1%} of renters pay 30%+ on rent."
         )
-    if "avg_commute_minutes" in cols:
+        
+    if "avg_commute_minutes" in cols_lower or any("commute" in c for c in cols_lower):
+        state_col = next((c for c in df.columns if c.lower() == "state"), "?")
+        val_col = next((c for c in df.columns if "commute" in c.lower() or "minutes" in c.lower()), "?")
+        val = r.get(val_col, 0)
+        
         return (
             f"Longest average commute in {year}: "
-            f"{r.get('STATE', r.get('state', '?'))} at "
-            f"{float(r.get('AVG_COMMUTE_MINUTES', r.get('avg_commute_minutes', 0))):.1f} minutes."
+            f"{r.get(state_col, '?')} at "
+            f"{float(val):.1f} minutes."
         )
-    if "inflow_any_total" in cols:
+        
+    if "inflow_any_total" in cols_lower or any("inflow" in c for c in cols_lower):
+        county_col = next((c for c in df.columns if c.lower() == "county"), "?")
+        state_col = next((c for c in df.columns if c.lower() == "state"), "?")
+        val_col = next((c for c in df.columns if "inflow" in c.lower() and "rate" not in c.lower() and "outside" not in c.lower()), "?")
+        val = r.get(val_col, 0)
+        
         return (
             f"Top migration destination in {year}: "
-            f"{r.get('COUNTY', r.get('county', '?'))}, {r.get('STATE', r.get('state', '?'))} — "
-            f"{int(r.get('INFLOW_ANY_TOTAL', r.get('inflow_any_total', 0))):,} total inflow."
+            f"{r.get(county_col, '?')}, {r.get(state_col, '?')} — "
+            f"{int(val):,} total inflow."
         )
-    if "pct_non_english" in cols:
+        
+    if "pct_non_english" in cols_lower or any("non-english" in c or "english" in c for c in cols_lower):
+        state_col = next((c for c in df.columns if c.lower() == "state"), "?")
+        val_col = next((c for c in df.columns if "%" in c.lower() or "pct" in c.lower()), "?")
+        val = r.get(val_col, 0)
+        
         return (
             f"Highest non-English household share in {year}: "
-            f"{r.get('STATE', r.get('state', '?'))} at "
-            f"{float(r.get('PCT_NON_ENGLISH', r.get('pct_non_english', 0))):.1%}."
+            f"{r.get(state_col, '?')} at "
+            f"{float(val):.1%}."
         )
 
     return f"Results for {year} shown above."

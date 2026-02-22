@@ -93,6 +93,7 @@ STRICT RULES:
 16. If the user asks for a specific rank (e.g. "5th", "3rd", "10th"), use ORDER BY + LIMIT 1 OFFSET N-1 to return ONLY that single row.
 17. NEVER use rent, commute, or migration views to answer general population questions. If they ask for population in a year where a generic pop view doesn't exist, return clarify.
 18. ALWAYS use `AS "Alias"` for every column in your SELECT statement. Convert the raw column names into clean, readable layman titles (Title Case). (e.g. `SELECT avg_commute_minutes AS "Average Commute Time (Mins)", pop_1p_total AS "Total Population (1yr+)"`).
+19. Pay close attention to "mean" or "average" vs "percentage". If asked for "average male population", compute `AVG(male_pop)`. Do NOT just return the `pct_male` column unless they ask for "percent", "proportion", or "share".
 
 OUTPUT FORMAT:
 First, think step-by-step (briefly):
