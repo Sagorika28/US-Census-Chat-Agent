@@ -126,4 +126,33 @@ def _fallback_summary(df: pd.DataFrame, year: int) -> str:
             f"{float(val):.1%}."
         )
 
+    # Generic fallback for any other state/county level data (e.g. population, education)
+    state_col = next((c for c in df.columns if c.lower() == "state"), None)
+    county_col = next((c for c in df.columns if c.lower() == "county"), None)
+    
+    geo_name = []
+    if county_col and r.get(county_col): geo_name.append(str(r.get(county_col)))
+    if state_col and r.get(state_col): geo_name.append(str(r.get(state_col)))
+    
+    if geo_name:
+        # Find the first column that isn't a geography column
+        val_cols = [c for c in df.columns if c.lower() not in ["state", "county"]]
+        if val_cols:
+            val_col = val_cols[0]
+            val = r.get(val_col, 0)
+            
+            # Format nicely based on value
+            if isinstance(val, (int, float)):
+                if abs(val) < 2 and val != 0 and val != 1:  # Likely a percentage
+                    val_str = f"{float(val):.1%}"
+                elif val > 1000:
+                    val_str = f"{int(val):,}"
+                else:
+                    val_str = f"{float(val):.1f}"
+            else:
+                val_str = str(val)
+                
+            geo_str = ", ".join(geo_name)
+            return f"{val_col} for {geo_str} in {year}: {val_str}."
+
     return f"Results for {year} shown above."
