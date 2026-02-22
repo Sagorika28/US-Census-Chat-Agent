@@ -1,5 +1,5 @@
 """
-US Census Chat Agent — Streamlit UI orchestrator.
+US Census Chat Agent - Streamlit UI orchestrator.
 
 This is the entry point deployed to Snowflake Streamlit.
 All logic lives in pipeline/, llm/, and helpers/.
@@ -181,7 +181,7 @@ def _render_compare(user_msg, year_note):
 # Page config + chat history
 
 st.set_page_config(page_title="US Census Chat Agent", layout="wide")
-st.title("US Census Chat Agent (Snowflake)")
+st.title("US Census Chat Agent")
 init_session_state()
 
 for m in get_messages():
