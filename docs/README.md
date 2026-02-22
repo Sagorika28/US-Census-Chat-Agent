@@ -7,7 +7,7 @@ A chat-based agent that answers US Census questions using the Snowflake Marketpl
 ```
 User -> Guardrails (NSFW + off-topic) -> SQL Agent (Claude 3.5 Sonnet)
      -> SQL Validator (safety + column check) -> Execute (Snowpark)
-     -> Answer Synthesizer (Llama 3.1 8B) -> UI
+     -> Answer Synthesizer (OpenAI o4-mini) -> UI
 ```
 
 - **SQL Agent**: LLM receives the full view catalog (names + columns + descriptions) and writes a SELECT query directly. The prompt natively requests readable layman titles (aliases) for table headers.
@@ -48,7 +48,7 @@ app/
 │   └── explainer.py        # One-line summary (fallback for synthesizer)
 ├── llm/
 │   ├── sql_agent.py        # Text-to-SQL via Cortex (Claude 3.5 Sonnet)
-│   ├── synthesizer.py      # Answer synthesis via Cortex (Llama 3.1 8B)
+│   ├── synthesizer.py      # Answer synthesis via Cortex (OpenAI o4-mini)
 │   └── planner.py          # Legacy JSON-spec planner (fallback path)
 └── helpers/
     ├── conversation.py     # Session-state wrappers
