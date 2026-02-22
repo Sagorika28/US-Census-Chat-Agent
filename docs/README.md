@@ -7,7 +7,7 @@ A chat-based agent that answers US Census questions using the Snowflake Marketpl
 ```
 User -> Guardrails (NSFW + off-topic) -> SQL Agent (Claude 3.5 Sonnet)
      -> SQL Validator (safety + column check) -> Execute (Snowpark)
-     -> Answer Synthesizer (OpenAI o4-mini) -> UI
+     -> Answer Synthesizer (Llama 3.1 8B) -> UI
 ```
 
 - **SQL Agent**: LLM receives the full view catalog (names + columns + descriptions) and writes a SELECT query directly. The prompt natively requests readable layman titles (aliases) for table headers.
@@ -35,30 +35,34 @@ User -> Guardrails (NSFW + off-topic) -> SQL Agent (Claude 3.5 Sonnet)
 
 ## Repo structure
 
-```
-app/
-├── streamlit_app.py        # UI orchestrator (entry point)
-├── config.py               # Views, models, column catalog, constants
-├── pipeline/               # Deterministic components
-│   ├── guardrails.py       # NSFW, on-topic, capability gate
-│   ├── router.py           # Topic/geo routing (fallback path)
-│   ├── compiler.py         # Deterministic SQL builder (fallback path)
-│   ├── validator.py        # SQL safety + column allowlist
-│   ├── executor.py         # Snowpark query runner
-│   └── explainer.py        # One-line summary (fallback for synthesizer)
-├── llm/
-│   ├── sql_agent.py        # Text-to-SQL via Cortex (Claude 3.5 Sonnet)
-│   ├── synthesizer.py      # Answer synthesis via Cortex (OpenAI o4-mini)
-│   └── planner.py          # Legacy JSON-spec planner (fallback path)
-└── helpers/
-    ├── conversation.py     # Session-state wrappers
-    ├── query_spec.py       # Spec schema (fallback path)
-    └── policies/
-        ├── year_policy.py
-        └── migration_policy.py
-tests/                      # 49 tests, pure Python
-sql/                        # View DDL + verification queries
-docs/                       # This README + dev_process.md
+```text
+├── streamlit_app.py        # Root entry point wrapper
+├── environment.yml         # Conda environment definition
+├── requirements.txt        # Python dependencies
+├── .env                    # (Optional) Local Snowflake credentials
+├── app/
+│   ├── streamlit_app.py    # Main UI orchestrator
+│   ├── config.py           # Views, models, column catalog, constants
+│   ├── pipeline/           # Deterministic components
+│   │   ├── guardrails.py   # NSFW, semantic semantic vector scope, capability gate
+│   │   ├── router.py       # Deterministic topic/geo routing
+│   │   ├── compiler.py     # Deterministic SQL builder
+│   │   ├── validator.py    # SQL safety + column allowlist
+│   │   ├── executor.py     # Snowpark query runner
+│   │   └── explainer.py    # One-line summary
+│   ├── llm/
+│   │   ├── sql_agent.py    # Text-to-SQL via Cortex (claude-3-5-sonnet)
+│   │   ├── synthesizer.py  # Answer synthesis via Cortex (llama3.1-8b)
+│   │   └── planner.py      # Legacy JSON-spec planner (fallback path)
+│   └── helpers/
+│       ├── conversation.py # Session-state wrappers
+│       ├── query_spec.py   # Spec schema (fallback path)
+│       └── policies/
+│           ├── year_policy.py
+│           └── migration_policy.py
+├── tests/                  # 49 tests, pure Python
+├── sql/                    # View DDL + verification queries
+└── docs/                   # This README + dev_process.md
 ```
 
 ## Running tests

@@ -128,7 +128,7 @@ Pipeline:
 
 LLM models:
 - SQL Agent: `claude-3.5-sonnet`
-- Synthesizer: `llama3.1-8b` (or `openai-o4-mini`)
+- Synthesizer: `llama3.1-8b`
 
 ---
 

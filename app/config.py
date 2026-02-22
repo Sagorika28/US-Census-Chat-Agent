@@ -12,7 +12,7 @@ DEFAULT_YEAR = 2020
 
 # LLM models (Snowflake Cortex)
 SQL_MODEL = "claude-3-5-sonnet"        # primary: text-to-SQL
-SUMMARY_MODEL = "openai-o4-mini"       # cheap/fast: answer synthesis
+SUMMARY_MODEL = "llama3.1-8b"          # cheap/fast: answer synthesis
 EMBEDDING_MODEL = "snowflake-arctic-embed-m"  # for vector semantic search
 
 # Allowed gold views
