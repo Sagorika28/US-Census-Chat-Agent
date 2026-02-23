@@ -56,7 +56,7 @@ User -> Guardrails (NSFW + off-topic) -> SQL Agent (Claude 3.5 Sonnet)
   - SELECT-only (or CTEs starting with `WITH`)
   - Regex word-boundary DDL/DML keyword blocking (`INSERT`, `DROP`, `TRUNCATE`, `EXECUTE`, `SYSTEM$`, etc.)
   - Banned: semicolons (multi-statement), SQL comments (`--`, `/* */`), `INFORMATION_SCHEMA`, `ACCOUNT_USAGE`
-  - Approved views only, LIMIT required
+  - Approved views only (checks both years for cross-year CTEs), LIMIT required and capped (enforced via robust regex)
   - Column allowlist: catches hallucinated column names. Double-quoted aliases are stripped before validation so readable headers like `"Average Commute (Mins)"` don't cause false rejections.
 - **Capability gate**: explains when household-based language data can't answer person-by-sex questions
 
