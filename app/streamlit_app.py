@@ -232,7 +232,7 @@ def _render_compare(user_msg, year_note):
     """2019 vs 2020 comparison. Let the LLM write a single cross-year CTE."""
     # Let the LLM handle it directly - it knows both 2019 and 2020 views
     # and can write a CTE that joins them and computes differences.
-    status, df, sql, view, debug_info = _execute_query(user_msg, 2020)
+    status, df, sql, view, _, debug_info = _execute_query(user_msg, 2020)
 
     if status in ("ok", "fallback") and df is not None and not df.empty:
         if status == "fallback":
@@ -252,7 +252,7 @@ def _render_compare(user_msg, year_note):
     # LLM couldn't do it -- fall back to running each year separately
     results = {}
     for y in (2019, 2020):
-        s, d, q, v, dbg = _execute_query(user_msg, y)
+        s, d, q, v, _, dbg = _execute_query(user_msg, y)
         if s in ("ok", "fallback") and d is not None and not d.empty:
             results[y] = (d, q, v, dbg)
 
@@ -506,7 +506,7 @@ if user_msg:
                 # is already validated, we just need a different year.
                 try:
                     with st.spinner("Thinking..."):
-                        df, sql, src_view, spec = _run_fallback_path(last_q, year)
+                        df, sql, src_view, spec, _ = _run_fallback_path(last_q, year)
                     saved = _render_results(last_q, df, sql, src_view, year, year_note,
                                             debug_info={"path": "fallback (year flip)", "sql": sql})
                     append_message("assistant", saved)
