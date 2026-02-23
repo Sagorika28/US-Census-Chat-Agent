@@ -38,7 +38,7 @@ def route_topic_geo(text: str) -> Tuple[str, str]:
         return "tenure", "state"
     if any(k in t for k in ["unemployment", "labor force", "employed", "unemployed"]):
         return "labor", "state"
-    if any(k in t for k in ["race", "white", "black", "asian"]):
+    if any(k in t for k in ["race", "white", "black", "asian", "ethnic", "ethnicity"]):
         return "race", "state"
     if any(k in t for k in ["hispanic", "latino"]):
         return "hispanic", "state"
