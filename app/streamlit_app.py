@@ -228,8 +228,6 @@ def _render_results(user_msg, df, sql, view, year, year_note, topic=None, debug_
 
 def _render_compare(user_msg, year_note):
     """2019 vs 2020 comparison. Let the LLM write a single cross-year CTE."""
-    st.markdown(year_note)
-
     # Let the LLM handle it directly - it knows both 2019 and 2020 views
     # and can write a CTE that joins them and computes differences.
     status, df, sql, view, debug_info = _execute_query(user_msg, 2020)
@@ -259,6 +257,8 @@ def _render_compare(user_msg, year_note):
     if not results:
         st.error("Could not generate queries for comparison.")
         return year_note
+
+    st.markdown(year_note)
 
     answers = [year_note]
     c1, c2 = st.columns(2)
