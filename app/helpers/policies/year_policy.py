@@ -30,10 +30,8 @@ def is_year_followup(text: str) -> Optional[str]:
     if re.fullmatch(r"(show\s+)?2020(\s+(too|also))?", t):
         return "2020"
 
-    if any(p in t for p in [
-        "compare", "both years", "2019 and 2020",
-        "2019 vs 2020", "2020 vs 2019",
-    ]):
+    # accept: compare / both / both years / show both / 2019 vs 2020 / compare them
+    if re.fullmatch(r"(compare|both|both\s+years|show\s+both|2019\s*(vs|and)\s*2020|compare\s+them|show\s+comparison)", t):
         return "compare"
 
     return None
@@ -49,7 +47,7 @@ def detect_year_mode(text: str) -> Tuple[str, Optional[int]]:
     t = text.lower()
     years = re.findall(r"\b(2019|2020)\b", t)
 
-    if any(w in t for w in ["compare", "trend", "change", "over time", "vs", "versus"]):
+    if any(w in t for w in ["compare", "trend", "over time", "vs", "versus"]):
         return "compare", None
     if years:
         return "single", int(years[-1])

@@ -14,6 +14,8 @@ Fallback:  If the LLM's SQL fails validation, the deterministic
 import copy
 import re
 import sys, os
+import time
+import traceback
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import streamlit as st
@@ -32,6 +34,7 @@ from app.helpers.conversation import (
     set_last_spec,
     get_last_question,
     set_last_question,
+    get_recent_history,
 )
 from app.helpers.query_spec import normalize_spec
 from app.helpers.policies.year_policy import is_year_followup, detect_year_mode
@@ -65,16 +68,18 @@ session = get_session()
 
 def _run_llm_path(user_msg: str, year: int):
     """
-    Try the LLM text-to-SQL path. Returns (df, sql, view, explanation)
+    Try the LLM text-to-SQL path. Returns (df, sql, view, explanation, debug)
     or raises on failure so the caller can fall back.
     """
-    result = generate_sql(session, user_msg, year)
+    t0 = time.time()
+    result = generate_sql(session, user_msg, year, chat_history=get_recent_history())
+    sql_gen_time = time.time() - t0
 
     mode = result.get("mode", "sql")
     if mode == "refuse":
-        return "refuse", None, None, None
+        return "refuse", None, None, None, {"llm_response": result, "sql_gen_sec": sql_gen_time}
     if mode == "clarify":
-        return "clarify", None, None, result.get("explanation", "Can you be more specific?")
+        return "clarify", None, None, result.get("explanation", "Can you be more specific?"), {"llm_response": result, "sql_gen_sec": sql_gen_time}
 
     sql = result.get("sql", "")
     llm_year = result.get("year", year)
@@ -85,8 +90,14 @@ def _run_llm_path(user_msg: str, year: int):
     validate_sql(sql, llm_year)
     validate_columns(sql)
 
+    t1 = time.time()
     df = run_query(session, sql)
-    return "ok", df, sql, view
+    query_exec_time = time.time() - t1
+
+    return "ok", df, sql, view, {
+        "llm_response": result, "sql": sql, "explanation": explanation,
+        "sql_gen_sec": sql_gen_time, "query_exec_sec": query_exec_time,
+    }
 
 
 def _run_fallback_path(user_msg: str, year: int):
@@ -109,28 +120,97 @@ def _run_fallback_path(user_msg: str, year: int):
 def _execute_query(user_msg: str, year: int):
     """
     Try the LLM path first, fall back to deterministic if it fails.
-    Returns (status, df, sql, view_or_explanation).
+    Returns (status, df, sql, view_or_explanation, debug_info).
     """
+    debug_info = {"path": "llm", "errors": []}
     try:
-        status, df, sql, view = _run_llm_path(user_msg, year)
+        status, df, sql, view, llm_debug = _run_llm_path(user_msg, year)
+        debug_info.update(llm_debug)
         if status in ("refuse", "clarify"):
-            return status, None, None, view
-        return "ok", df, sql, view
-    except Exception:
-        # LLM failed — use deterministic fallback
-        df, sql, src_view, spec = _run_fallback_path(user_msg, year)
-        return "ok", df, sql, src_view
+            return status, None, None, view, debug_info
+        return "ok", df, sql, view, debug_info
+    except Exception as llm_err:
+        debug_info["path"] = "fallback"
+        debug_info["llm_error"] = f"{type(llm_err).__name__}: {llm_err}"
+        debug_info["llm_traceback"] = traceback.format_exc()
+        debug_info["errors"].append(f"LLM path failed: {llm_err}")
+        # LLM failed -- use deterministic fallback (simpler query)
+        try:
+            df, sql, src_view, spec = _run_fallback_path(user_msg, year)
+            debug_info["fallback_sql"] = sql
+            debug_info["fallback_spec"] = str(spec)
+            return "fallback", df, sql, src_view, debug_info
+        except Exception as fb_err:
+            debug_info["fallback_error"] = f"{type(fb_err).__name__}: {fb_err}"
+            debug_info["fallback_traceback"] = traceback.format_exc()
+            debug_info["errors"].append(f"Fallback path also failed: {fb_err}")
+            return "error", None, None, str(fb_err), debug_info
 
 
 # Rendering helpers
 
-def _render_results(user_msg, df, sql, view, year, year_note, topic=None):
+def _show_debug(debug_info: dict, sql: str = None) -> None:
+    """Show debug panel when debug mode is enabled."""
+    if not st.session_state.get("debug_mode"):
+        return
+    with st.expander("Debug Info", expanded=True):
+        # Timing summary
+        parts = []
+        if debug_info.get("sql_gen_sec"):
+            parts.append(f"SQL generation: {debug_info['sql_gen_sec']:.1f}s")
+        if debug_info.get("query_exec_sec"):
+            parts.append(f"Query execution: {debug_info['query_exec_sec']:.1f}s")
+        if debug_info.get("synth_sec"):
+            parts.append(f"Answer synthesis: {debug_info['synth_sec']:.1f}s")
+        if parts:
+            st.caption("Timing: " + " · ".join(parts))
+        if sql:
+            st.code(sql, language="sql")
+        path = debug_info.get("path", "unknown")
+        st.caption(f"**Path used:** `{path}`")
+        if debug_info.get("explanation"):
+            st.caption(f"**LLM explanation:** {debug_info['explanation']}")
+        if debug_info.get("llm_response"):
+            st.json(debug_info["llm_response"])
+        if debug_info.get("llm_error"):
+            st.warning(f"LLM error: {debug_info['llm_error']}")
+        if debug_info.get("llm_traceback"):
+            st.code(debug_info["llm_traceback"], language="text")
+        if debug_info.get("fallback_sql"):
+            st.caption("**Fallback SQL:**")
+            st.code(debug_info["fallback_sql"], language="sql")
+        if debug_info.get("fallback_error"):
+            st.error(f"Fallback error: {debug_info['fallback_error']}")
+        if debug_info.get("fallback_traceback"):
+            st.code(debug_info["fallback_traceback"], language="text")
+
+
+def _render_results(user_msg, df, sql, view, year, year_note, topic=None, debug_info=None):
     """Render query results and return the answer text for chat history."""
     st.markdown(year_note)
 
+    # Show debug info when enabled
+    if debug_info:
+        _show_debug(debug_info, sql)
+
     # LLM answer synthesis
-    answer = synthesize_answer(session, user_msg, sql, view, df, year)
+    try:
+        t0 = time.time()
+        answer = synthesize_answer(session, user_msg, sql, view, df, year, chat_history=get_recent_history())
+        synth_time = time.time() - t0
+        if debug_info:
+            debug_info["synth_sec"] = synth_time
+    except Exception as e:
+        answer = f"Could not generate a summary: {e}"
+        synth_time = 0.0
+        if st.session_state.get("debug_mode"):
+            st.warning(f"Synthesizer error: {e}")
     st.markdown(answer)
+
+    # Always show timing as a subtle caption
+    total = (debug_info or {}).get("sql_gen_sec", 0) + (debug_info or {}).get("query_exec_sec", 0) + synth_time
+    if total > 0:
+        st.caption(f"...Thought for {total:.1f}s")
 
     st.dataframe(df, width="stretch")
     st.caption(f"Source: `{view}`")
@@ -147,15 +227,34 @@ def _render_results(user_msg, df, sql, view, year, year_note, topic=None):
 
 
 def _render_compare(user_msg, year_note):
-    """Side-by-side 2019 vs 2020 comparison. Returns combined answer text."""
+    """2019 vs 2020 comparison. Let the LLM write a single cross-year CTE."""
     st.markdown(year_note)
+
+    # Let the LLM handle it directly - it knows both 2019 and 2020 views
+    # and can write a CTE that joins them and computes differences.
+    status, df, sql, view, debug_info = _execute_query(user_msg, 2020)
+
+    if status in ("ok", "fallback") and df is not None and not df.empty:
+        if status == "fallback":
+            st.warning(
+                "The comparison was too complex, so I'm showing "
+                "a simplified version. Try a more specific question."
+            )
+        return _render_results(user_msg, df, sql, view, 2020, year_note,
+                               debug_info=debug_info)
+
+    if status in ("refuse", "clarify"):
+        reply = view or "Could you clarify what you'd like to compare?"
+        st.markdown(reply)
+        _show_debug(debug_info)
+        return reply
+
+    # LLM couldn't do it -- fall back to running each year separately
     results = {}
     for y in (2019, 2020):
-        status, df, sql, view = _execute_query(user_msg, y)
-        if status != "ok":
-            st.warning(f"Could not generate query for {y}.")
-            continue
-        results[y] = (df, sql, view)
+        s, d, q, v, dbg = _execute_query(user_msg, y)
+        if s in ("ok", "fallback") and d is not None and not d.empty:
+            results[y] = (d, q, v, dbg)
 
     if not results:
         st.error("Could not generate queries for comparison.")
@@ -166,13 +265,18 @@ def _render_compare(user_msg, year_note):
     for col, y in [(c1, 2019), (c2, 2020)]:
         if y not in results:
             continue
-        df, sql, view = results[y]
+        d, q, v, dbg = results[y]
         with col:
             st.subheader(str(y))
-            answer = synthesize_answer(session, user_msg, sql, view, df, y)
+            _show_debug(dbg, q)
+            try:
+                answer = synthesize_answer(session, user_msg, q, v, d, y,
+                                           chat_history=get_recent_history())
+            except Exception as e:
+                answer = f"Could not generate a summary for {y}: {e}"
             st.markdown(answer)
-            st.dataframe(df, width="stretch")
-            st.caption(f"Source: `{view}`")
+            st.dataframe(d, width="stretch")
+            st.caption(f"Source: `{v}`")
             answers.append(f"**{y}**: {answer}")
 
     return "\n\n".join(answers)
@@ -183,6 +287,38 @@ def _render_compare(user_msg, year_note):
 st.set_page_config(page_title="US Census Chat Agent", layout="wide")
 st.title("US Census Chat Agent")
 init_session_state()
+
+# Demo questions sidebar
+_DEMO_QUESTIONS = [
+    # 4 required (rent, commute, migration, language)
+    "In which areas of the country do residents spend, on average, over 30% of their income on rent?",
+    "Which states have the longest average commutes?",
+    "Which counties have the highest amount of migration (people moving in)?",
+    "What are the top states with non-English speaking populations?",
+    # Extra demos
+    "Which of the top 5 non-english speaking states have the longest commute time amongst them?",
+    "Based on 2019-2020 Census data, which state ranked 3rd for the largest increase or decrease in average commute time? Additionally, which state saw the 2nd largest change in non-English speaking households during that same period?",
+    "Compare unemployment rates across states",
+    "Which state has the highest female population?",
+    "Top states by bachelor's degree attainment",
+    "Show 2019 vs 2020 commute comparison",
+]
+
+with st.sidebar:
+    st.header("Try a Question")
+    st.caption("Click any question below to get started:")
+
+    def _set_demo(q):
+        st.session_state["demo_q"] = q
+
+    for q in _DEMO_QUESTIONS:
+        st.button(q, key=f"demo_{q}", use_container_width=True,
+                  on_click=_set_demo, args=(q,))
+
+    st.divider()
+    if "debug_mode" not in st.session_state:
+        st.session_state["debug_mode"] = False
+    st.toggle("Show SQL & Debug", key="debug_mode")
 
 for m in get_messages():
     with st.chat_message(m["role"]):
@@ -195,6 +331,10 @@ user_msg = st.chat_input(
     "Ask a question about US population "
     "(rent, commute, migration, language, demographics)..."
 )
+
+# Accept demo question from sidebar click
+if not user_msg and "demo_q" in st.session_state:
+    user_msg = st.session_state.pop("demo_q")
 
 if user_msg:
     append_message("user", user_msg)
@@ -240,6 +380,7 @@ if user_msg:
                 df = run_query(session, sql)
                 answer = synthesize_answer(
                     session, user_msg, sql, src_view, df, year,
+                    chat_history=get_recent_history(),
                 )
                 st.markdown(f"Using {year}.")
                 st.markdown(answer)
@@ -278,7 +419,7 @@ if user_msg:
         # Greetings
         if t_lower in {"hi", "hello", "hey", "sup", "yo", "hola"}:
             reply = (
-                "Hey! Ask me anything about US Census data — "
+                "Hey! Ask me anything about US Census data - "
                 "rent, commute, migration, language, demographics, and more."
             )
             st.markdown(reply)
@@ -329,12 +470,13 @@ if user_msg:
             clear_pending()
             used_pending = True
             year = DEFAULT_YEAR
-            sql, src_view, src_cols = compile_sql(spec, year)
-            validate_sql(sql, year)
-            df = run_query(session, sql)
+            with st.spinner("Thinking..."):
+                sql, src_view, src_cols = compile_sql(spec, year)
+                validate_sql(sql, year)
+                df = run_query(session, sql)
             year_note = f"Using {year}."
             saved = _render_results(user_msg, df, sql, src_view, year, year_note,
-                                    topic=spec.get("topic"))
+                                    topic=spec.get("topic"), debug_info={"path": "pending", "sql": sql})
             set_last_spec(spec)
             set_last_question(user_msg)
             append_message("assistant", saved)
@@ -352,20 +494,26 @@ if user_msg:
         if not used_pending and follow and last_q:
             if follow == "compare":
                 year_note = "Showing both 2019 and 2020 (comparison)."
-                combined = _render_compare(last_q, year_note)
+                with st.spinner("Thinking..."):
+                    combined = _render_compare(last_q, year_note)
                 append_message("assistant", combined)
             else:
                 year = int(follow)
                 year_note = f"Using {year}."
-                # Use deterministic fallback for year flips — the question
+                # Use deterministic fallback for year flips - the question
                 # is already validated, we just need a different year.
                 try:
-                    df, sql, src_view, spec = _run_fallback_path(last_q, year)
-                    saved = _render_results(last_q, df, sql, src_view, year, year_note)
+                    with st.spinner("Thinking..."):
+                        df, sql, src_view, spec = _run_fallback_path(last_q, year)
+                    saved = _render_results(last_q, df, sql, src_view, year, year_note,
+                                            debug_info={"path": "fallback (year flip)", "sql": sql})
                     append_message("assistant", saved)
-                except Exception:
+                except Exception as e:
                     reply = f"Sorry, that query isn't available for {year}. Try asking a new question."
                     st.markdown(reply)
+                    if st.session_state.get("debug_mode"):
+                        st.error(f"Detail: {e}")
+                        st.code(traceback.format_exc(), language="text")
                     append_message("assistant", reply)
 
             st.stop()
@@ -394,27 +542,71 @@ if user_msg:
 
         try:
             if year_mode == "compare":
-                combined = _render_compare(user_msg, year_note)
+                with st.spinner("Thinking..."):
+                    combined = _render_compare(user_msg, year_note)
                 set_last_question(user_msg)
                 route_t, route_g = route_topic_geo(user_msg)
                 set_last_spec({"topic": route_t, "geo": route_g, "limit": 15})
                 append_message("assistant", combined)
             else:
-                status, df, sql, view = _execute_query(user_msg, year)
+                with st.spinner("Thinking..."):
+                    status, df, sql, view, debug_info = _execute_query(user_msg, year)
 
                 if status == "refuse":
                     reply = "I can't help with that request."
                     st.markdown(reply)
+                    _show_debug(debug_info)
                     append_message("assistant", reply)
                     st.stop()
 
                 if status == "clarify":
                     reply = view or "Can you clarify what specific metric or geography you want?"
                     st.markdown(reply)
+                    _show_debug(debug_info)
                     append_message("assistant", reply)
                     st.stop()
 
-                saved = _render_results(user_msg, df, sql, view, year, year_note)
+                if status == "error":
+                    reply = (
+                        "I'm sorry, I wasn't able to answer that question with the available data. "
+                        "Could you rephrase or try a simpler question?"
+                    )
+                    st.markdown(reply)
+                    _show_debug(debug_info)
+                    append_message("assistant", reply)
+                    st.stop()
+
+                if status == "fallback":
+                    # Tell the user exactly what simplified data they're seeing
+                    topic_label = "related"
+                    if view:
+                        vl = view.lower()
+                        if "rent" in vl:
+                            topic_label = "general rent burden"
+                        elif "commute" in vl:
+                            topic_label = "general commute"
+                        elif "migration" in vl:
+                            topic_label = "general migration"
+                        elif "language" in vl:
+                            topic_label = "general language"
+                        elif "pop_sex" in vl or "demographic" in vl:
+                            topic_label = "general demographics"
+                        elif "labor" in vl or "employ" in vl:
+                            topic_label = "general labor/employment"
+                        elif "edu" in vl:
+                            topic_label = "general education"
+                        elif "hispanic" in vl or "race" in vl:
+                            topic_label = "general race/ethnicity"
+                        elif "tenure" in vl:
+                            topic_label = "general housing tenure"
+                    st.warning(
+                        f"Your question was too complex for me to answer precisely, "
+                        f"so I'm showing {topic_label} results instead. "
+                        f"Try breaking your question into simpler parts for a more accurate answer."
+                    )
+
+                saved = _render_results(user_msg, df, sql, view, year, year_note,
+                                        debug_info=debug_info)
 
                 # Save context so year follow-ups work
                 set_last_question(user_msg)
@@ -423,4 +615,12 @@ if user_msg:
                 append_message("assistant", saved)
 
         except Exception as e:
-            st.error(f"Error: {e}")
+            reply = (
+                "An unexpected error occurred. "
+                "Please try rephrasing your question."
+            )
+            st.error(reply)
+            if st.session_state.get("debug_mode"):
+                st.error(f"Detail: {e}")
+                st.code(traceback.format_exc(), language="text")
+            append_message("assistant", reply)

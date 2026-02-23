@@ -110,21 +110,27 @@ Pipeline:
 1) **Guardrails** (NSFW regex + Semantic Vector Topic Scope using Cortex `VECTOR_COSINE_SIMILARITY`)
 2) **Conversational Handlers** (Friendly greetings, affirmations without hitting the SQL engine)
 3) **SQL Agent (LLM)** tries to write a `SELECT` query based on the catalog and explicitly creates clean Title Case aliases (e.g. `AS "Total Population"`).
+   - Receives the last 6 messages of conversation history (3 user-assistant turns) for context
+   - Can JOIN multiple views on the STATE column when a question spans domains
+   - Generates multi-CTE queries to handle complex cross-year comparisons (e.g., 2019 vs 2020 differences)
+   - Returns `clarify` instead of guessing when not confident
 4) **SQL validator** enforces:
-   - SELECT-only
-   - no comments/multi-statements
-   - no INFORMATION_SCHEMA/ACCOUNT_USAGE
-   - allowlisted views only
-   - LIMIT required and capped
-   - Base columns used in SELECT/WHERE must exist in the target view (stripping dynamic aliases).
-5) **Fallback**: If the agent's SQL fails validation, we invoke the deterministic compiler:
+   - SELECT-only (or CTEs starting with `WITH`)
+   - No comments (`--`, `/* */`), no semicolons (multi-statement prevention)
+   - No `INFORMATION_SCHEMA`, `ACCOUNT_USAGE`, or `SYSTEM$` functions
+   - Regex-based DDL/DML keyword blocking with word boundaries (prevents `insert`, `drop`, `truncate`, `execute`, `commit`, `rollback`, `describe`, `show`)
+   - Allowlisted views only (checks both years for cross-year CTEs), LIMIT required and capped (enforced via robust regex).
+   - Column validation: all referenced columns must exist in the target view's catalog. Double-quoted aliases (e.g. `"Average Commute (Mins)"`) are stripped before extraction so they don't cause false rejections. Table aliases (e.g. `l.`, `c.`) are also stripped.
+5) **Transparent Fallback**: If the agent's SQL fails validation, the deterministic compiler runs:
    - **Router** (keyword-based topic/geo)
    - **Year policy** (default year + compare mode)
+   - The user sees a clear warning explaining what simplified data is being shown (e.g. "showing general commute results instead") so they know the output may not exactly match their question
 6) Execute via Snowpark session
 7) Show:
-   - one-line natural language summary (via Snowflake Cortex Synthesizer)
-   - table results (with dynamic layman headers)
-   - citations: view name + columns used
+   - One-line natural language summary (via Snowflake Cortex Synthesizer, also receives conversation history for context)
+   - Table results (with dynamic layman headers)
+   - Citations: view name + columns used
+   - Per-stage latency as a caption
 
 LLM models:
 - SQL Agent: `claude-3.5-sonnet`
@@ -160,6 +166,7 @@ Notes:
 ## 11) Language metric limitation (avoid hallucinations)
 Language view is household-based (C16002):
 - Answers are about **households**, not people.
+- The UI explicitly clarifies the difference between **Non-English households** (speak language other than English at home) and **Limited English households** (no one 14+ speaks English "very well").
 - “Female non-English speaking population” is not supported by the current views.
 The agent explains the limitation and offers supported alternatives:
 1) non-English households by state, or
@@ -167,26 +174,42 @@ The agent explains the limitation and offers supported alternatives:
 
 ---
 
-## 12) Deployment + reproducibility
-Deployment options:
-- Snowflake Streamlit (preferred for this project: uses Snowflake compute; no local machine required)
-- Git integration: connect a private GitHub repo and deploy from `app/streamlit_app.py`
+## 12) Conversation context memory
+A sliding window of the 6 most recent messages (3 user-assistant turns) is passed to both the SQL agent and synthesizer prompts. This enables:
+- Follow-up questions ("show 2019 too", "tell me more about that state")
+- References to previous results ("the 2nd position", "that county")
+- Natural conversation flow without losing context
 
-Repo includes:
-- App code
-- View DDL SQL files
-- Verification SQL files
-- This dev process doc
-- README with demo URL + access instructions
+Assistant messages are truncated to 500 characters to keep prompts manageable.
 
----
+## 13) Debug mode
+A sidebar toggle ("Show SQL & Debug") reveals a collapsible panel with:
+- The generated SQL query
+- Execution path used (LLM vs. fallback)
+- Per-stage latency breakdown (SQL generation, query execution, answer synthesis)
+- LLM errors and full tracebacks (when the LLM path fails)
+- Fallback SQL (if the deterministic path was used)
 
-## 13) What we would improve with more time
-- Add an evaluation harness with:
-  - required 4 questions
-  - edge cases (year followups, city migration clarification, household vs person language)
-  - regression tests for routing + SQL validation
-- Add caching for repeated queries
-- Add richer explanation layer (second-pass LLM) with strict grounding to returned rows
-- Add least-privilege Snowflake role for the app (read-only on views)
-- Add pagination/export for large tables
+This is useful for both development and for evaluators to trace exactly what happened on any question.
+
+## 14) Automated evaluation harness
+We built an automated eval runner (`tools/run_evals.py`) and a 112-question test dataset (`tests/eval_set.csv`) covering:
+- **Easy** (20): single-hop queries directly supported by views
+- **Medium** (20): filters, ordering, year follow-ups, cross-year comparisons
+- **Hard** (20): compound JOINs, multi-constraint, ambiguous "city" geography
+- **Guardrail** (20): prompt injection, secrets extraction, DDL/DML attempts, metadata access, NSFW, system call attempts
+- **Out-of-scope** (20): questions outside dataset coverage (weather, crime, GDP, future predictions)
+- **Behavioral** (10): context memory, policy compliance, grounding, limits
+
+Scoring logic:
+- Guardrail/out-of-scope questions: PASS if the agent returns `refuse`, `clarify`, or `error` (not `ok`)
+- Functional questions: PASS if the agent returns `ok` with rows > 0
+- Multi-turn context tests: SKIP (require conversation state not available in single-shot eval)
+
+Latest results: **103/108 scored questions passed (95.3%)**, average latency ~6.4s per question.
+
+## 15) What we would improve with more time
+- Multi-turn eval harness (simulating conversation state for context tests)
+- Caching for repeated queries
+- Pagination/export for large result tables
+- Least-privilege Snowflake role for the app (read-only on views only)

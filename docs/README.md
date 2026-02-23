@@ -30,10 +30,13 @@ User -> Guardrails (NSFW + off-topic) -> SQL Agent (Claude 3.5 Sonnet)
      -> Answer Synthesizer (Llama 3.1 8B) -> UI
 ```
 
-- **SQL Agent**: LLM receives the full view catalog (names + columns + descriptions) and writes a SELECT query directly. The prompt natively requests readable layman titles (aliases) for table headers.
-- **Validator**: SELECT-only, approved views only, LIMIT required, column allowlist enforced (stripping aliases safely). Non-negotiable.
-- **Fallback**: If the LLM's SQL fails validation, a deterministic router + compiler produces a guaranteed-valid backend query.
+- **SQL Agent**: LLM receives the full view catalog (names + columns + descriptions) and the last 6 messages of conversation history (3 user-assistant turns) as context. It writes a SELECT query directly with readable Title Case aliases.
+- **Validator**: SELECT-only, approved views only, LIMIT required, column allowlist enforced (double-quoted aliases are stripped before validation so they don't trigger false column errors). Regex-based DDL/DML blocking with word boundaries. Non-negotiable.
+- **Transparent Fallback**: If the LLM's SQL fails validation, a deterministic router + compiler produces a guaranteed-valid backend query. The user sees a clear warning explaining that a simplified version is being shown (e.g., "showing general commute results instead") so they can rephrase.
 - **Synthesizer**: Second LLM call turns results into a natural-language answer with key findings and caveats.
+- **JOINs**: The SQL agent can JOIN multiple views on the STATE column when a question requires data from different domains (e.g., "states with highest commute AND highest rent burden").
+- **Conversation Context**: A sliding window of the most recent 6 messages (3 user-assistant turns) is passed to both the SQL agent and synthesizer, enabling follow-up questions like "show 2019 too" or "tell me more about that state." Assistant messages are truncated to 500 characters to manage prompt size.
+- **Honest Clarification**: When the LLM is not confident it can answer accurately, it returns a clarification instead of guessing. This prevents hallucinated or misleading results.
 
 ## What it can answer
 
@@ -49,9 +52,22 @@ User -> Guardrails (NSFW + off-topic) -> SQL Agent (Claude 3.5 Sonnet)
 - NSFW filter (regex) before any LLM call
 - **Semantic Topic Guardrail**: Uses Snowflake Cortex vector embeddings (`VECTOR_COSINE_SIMILARITY`) to measure the mathematical semantic closeness between the user's prompt and a baseline demographics concept. Dynamically rejects off-topic queries without relying on brittle keyword lists.
 - **Conversational Handlers**: Recognizes greetings, identity questions, and gratitude without triggering errors or hitting the SQL agent.
-- SQL validator: SELECT-only, banned DDL/DML, no metadata schemas, approved views only, LIMIT required
-- Column allowlist: catches hallucinated column names (the #1 text-to-SQL failure mode), correctly splitting out dynamic AS aliases.
-- Capability gate: explains when household-based language data can't answer person-by-sex questions
+- **SQL Validator (defense-in-depth)**:
+  - SELECT-only (or CTEs starting with `WITH`)
+  - Regex word-boundary DDL/DML keyword blocking (`INSERT`, `DROP`, `TRUNCATE`, `EXECUTE`, `SYSTEM$`, etc.)
+  - Banned: semicolons (multi-statement), SQL comments (`--`, `/* */`), `INFORMATION_SCHEMA`, `ACCOUNT_USAGE`
+  - Approved views only, LIMIT required
+  - Column allowlist: catches hallucinated column names. Double-quoted aliases are stripped before validation so readable headers like `"Average Commute (Mins)"` don't cause false rejections.
+- **Capability gate**: explains when household-based language data can't answer person-by-sex questions
+
+## Debug Mode
+
+A "Show SQL & Debug" toggle in the sidebar reveals:
+- Generated SQL
+- Execution path (LLM vs. fallback)
+- Per-stage latency (SQL generation, query execution, answer synthesis)
+- LLM errors and tracebacks (when applicable)
+- Fallback SQL (if the deterministic path was used)
 
 ## Repo structure
 
@@ -80,7 +96,10 @@ User -> Guardrails (NSFW + off-topic) -> SQL Agent (Claude 3.5 Sonnet)
 │       └── policies/
 │           ├── year_policy.py
 │           └── migration_policy.py
-├── tests/                  # 49 tests, pure Python
+├── tests/                  # Unit tests (49+) + eval_set.csv (110 test cases)
+│   └── eval_set.csv        # Automated eval dataset (easy/medium/hard/guardrail/out-of-scope)
+├── tools/
+│   └── run_evals.py        # Automated evaluation runner
 ├── sql/                    # View DDL + verification queries
 └── docs/                   # This README + dev_process.md
 ```
@@ -91,6 +110,23 @@ User -> Guardrails (NSFW + off-topic) -> SQL Agent (Claude 3.5 Sonnet)
 source .venv/bin/activate
 python -m pytest tests/ -v
 ```
+
+## Automated Evaluation
+
+An automated eval runner (`tools/run_evals.py`) tests the full pipeline against 112 questions across categories:
+- **Easy** (20): single-hop queries directly supported by views
+- **Medium** (20): filters, ordering, year follow-ups
+- **Hard** (20): compound JOINs, multi-constraint, ambiguous geography
+- **Guardrail** (20): prompt injection, secrets, DDL/DML, metadata access, NSFW
+- **Out-of-scope** (20): questions outside dataset coverage
+- **Behavioral** (10): context memory, policy compliance, grounding
+
+```bash
+source .venv/bin/activate
+python tools/run_evals.py tests/eval_set.csv
+```
+
+Latest results: **103/108 scored questions passed (95.3%)**, average latency ~6.4s per question. 4 multi-turn context tests are skipped (require conversation state).
 
 ## Production upgrade path
 

@@ -27,8 +27,12 @@ MIGRATION_INFO_MSG = (
 )
 
 LANGUAGE_INFO_MSG = (
-    "Language metrics are household-based (share of households), "
-    "not person-level language."
+    "Language metrics are **household-based** (share of households), "
+    "not person-level. "
+    "**Non-English households** = households where a language other than English "
+    "is spoken at home. "
+    "**Limited English households** = households where no one age 14+ "
+    "speaks English \"very well\" (i.e., linguistically isolated)."
 )
 
 CHOOSE_ALT_MSG = (

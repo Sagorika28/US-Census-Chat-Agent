@@ -68,3 +68,30 @@ def get_last_question() -> Optional[str]:
 
 def set_last_question(q: str) -> None:
     st.session_state.last_question = q
+
+
+def get_recent_history(n: int = 6) -> str:
+    """Return the last *n* messages as a formatted string for LLM context.
+
+    Default n=6 = 3 user-assistant exchanges.  Assistant messages are
+    trimmed aggressively: SQL, data tables, and source citations are
+    stripped, and only the first ~120 chars are kept (roughly one sentence)
+    so previous topics don't overwhelm the current question.
+    """
+    import re
+    msgs = st.session_state.get("messages", [])
+    recent = msgs[-n:] if msgs else []
+    lines = []
+    for m in recent:
+        role = "User" if m["role"] == "user" else "Assistant"
+        content = m["content"]
+        if m["role"] == "assistant":
+            # Strip SQL blocks, markdown tables, and source lines
+            content = re.sub(r"```.*?```", "", content, flags=re.DOTALL)
+            content = re.sub(r"\|.*\|", "", content)
+            content = re.sub(r"Source:.*", "", content)
+            content = content.strip()
+            # Keep only the first ~120 chars (one sentence of context)
+            content = content[:120].rsplit(" ", 1)[0] + "..." if len(content) > 120 else content
+        lines.append(f"{role}: {content}")
+    return "\n".join(lines)

@@ -2,7 +2,7 @@
 SQL compiler: maps a query spec → (SQL string, source view, column list).
 
 All SQL is built deterministically from the curated view registry.
-The LLM never writes SQL — only the compiler does.
+# The LLM never writes SQL - only the compiler does.
 """
 
 from typing import Any, Dict, List, Optional, Tuple

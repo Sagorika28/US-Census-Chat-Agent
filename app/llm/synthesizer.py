@@ -30,6 +30,7 @@ def synthesize_answer(
     view_name: str,
     df: pd.DataFrame,
     year: int,
+    chat_history: str = "",
 ) -> str:
     """
     Generate a natural-language answer from query results.
@@ -43,8 +44,12 @@ def synthesize_answer(
     # Prepare a text table of results (top 10 rows max)
     results_text = df.head(10).to_string(index=False)
 
-    prompt = f"""You are a data analyst explaining US Census results to a non-technical user.
+    history_block = ""
+    if chat_history:
+        history_block = f"\nCONVERSATION HISTORY (recent exchanges):\n{chat_history}\n"
 
+    prompt = f"""You are a data analyst explaining US Census results to a non-technical user.
+{history_block}
 USER QUESTION: {user_question}
 YEAR: {year}
 SOURCE VIEW: {view_name}
@@ -58,10 +63,18 @@ Write a response with:
 2. A short bullet list of 3-5 key findings from the data.
 3. Any important caveats (e.g. "counties include independent cities", "language data is household-based, not person-level").
 4. A one-line "Source: {view_name}" at the end.
+5. If the user asked a multi-part or compound question, make sure you address EVERY part explicitly. For example, if they asked "X and by how much more than Y", calculate and state the difference. If they reference previous results ("the 2nd position", "that state"), use CONVERSATION HISTORY to resolve what they mean.
 
 Be concise and factual. Only reference numbers that appear in the results above. Do not add any numbers not present in RESULTS. If unsure, say you can't tell from the table.
 If the RESULTS are empty or missing, say 'No rows returned' and suggest a next query.
 Do NOT use markdown headers. Use plain text with bullet points (- ).
+
+STRICT TONE RULES (CRITICAL):
+- NO EMOJIS under any circumstances.
+- NO AI BUZZWORDS like "delve", "explore", "uncover", "here is", "in this data".
+- NO em-dashes (—). If you need a dash, use a single standard hyphen (-).
+- NO long dashed lines (---- or ____).
+- Speak plainly and directly like a human analyst.
 """
 
     try:
@@ -88,7 +101,7 @@ def _fallback_summary(df: pd.DataFrame, year: int) -> str:
         
         return (
             f"Highest rent-burden area in {year}: "
-            f"{r.get(county_col, '?')}, {r.get(state_col, '?')} — "
+            f"{r.get(county_col, '?')}, {r.get(state_col, '?')} - "
             f"{float(val):.1%} of renters pay 30%+ on rent."
         )
         
@@ -111,7 +124,7 @@ def _fallback_summary(df: pd.DataFrame, year: int) -> str:
         
         return (
             f"Top migration destination in {year}: "
-            f"{r.get(county_col, '?')}, {r.get(state_col, '?')} — "
+            f"{r.get(county_col, '?')}, {r.get(state_col, '?')} - "
             f"{int(val):,} total inflow."
         )
         
