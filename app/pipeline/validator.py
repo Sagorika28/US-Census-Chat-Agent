@@ -31,16 +31,19 @@ def validate_sql(sql: str, year: int) -> None:
     """
     s = sql.strip().lower()
 
-    if not (s.startswith("select") or s.startswith("with")):
+    # Strip string literals to avoid false positives on comments/semicolons inside valid strings
+    s_no_literals = re.sub(r"'[^']*'", "''", s)
+
+    if not (s_no_literals.startswith("select") or s_no_literals.startswith("with")):
         raise ValueError("Only SELECT queries (including CTEs) are allowed.")
 
-    if "information_schema" in s or "account_usage" in s:
+    if "information_schema" in s_no_literals or "account_usage" in s_no_literals:
         raise ValueError("Metadata access is not allowed.")
 
-    if "--" in s or "/*" in s or "*/" in s or ";" in s:
+    if "--" in s_no_literals or "/*" in s_no_literals or "*/" in s_no_literals or ";" in s_no_literals:
         raise ValueError("Comments and multi-statements are not allowed.")
 
-    if "system$" in s:
+    if "system$" in s_no_literals:
         raise ValueError("System functions are not allowed.")
 
     pattern = r"\b(" + "|".join(_BANNED_KEYWORDS) + r")\b"

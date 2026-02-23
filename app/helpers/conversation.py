@@ -89,7 +89,11 @@ def get_recent_history(n: int = 6) -> str:
             # Strip SQL blocks, markdown tables, and source lines
             content = re.sub(r"```.*?```", "", content, flags=re.DOTALL)
             content = re.sub(r"\|.*\|", "", content)
-            content = re.sub(r"Source:.*", "", content)
+            
+            # The UI renders "Source: SNOWFLAKE..." but the raw text might be 
+            # `Source: <view_name>` or `Source: _<view_name>_`
+            content = re.sub(r"Source:.*", "", content, flags=re.IGNORECASE)
+            
             content = content.strip()
             # Keep only the first ~120 chars (one sentence of context)
             content = content[:120].rsplit(" ", 1)[0] + "..." if len(content) > 120 else content

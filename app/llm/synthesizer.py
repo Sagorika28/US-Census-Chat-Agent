@@ -39,7 +39,7 @@ def synthesize_answer(
     Falls back to a simple one-liner if the LLM fails.
     """
     if df is None or df.empty:
-        return f"No results found for {year}."
+        return f"No results found for your query. Try adjusting your filters."
 
     # Prepare a text table of results (top 10 rows max)
     results_text = df.head(10).to_string(index=False)

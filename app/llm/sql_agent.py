@@ -100,6 +100,7 @@ STRICT RULES:
 23. HONESTY: If you are NOT confident you can answer the question accurately with the available views and columns, return {{"mode": "clarify", "explanation": "reason"}}. NEVER guess or fabricate data. It is better to say you can't answer than to give a wrong answer.
 24. COUNTY NAMES: The COUNTY column stores full names including the suffix (e.g. 'King County', 'Travis County', 'Miami-Dade County'). When filtering by county, always use COUNTY LIKE '%King%' or the full name 'King County'. NEVER use just 'King' without the suffix.
 25. CROSS-YEAR COMPARISONS: When comparing 2019 vs 2020 data, use separate CTEs for each year and join them. In the SELECT of each CTE, use the ORIGINAL column names from the view catalog (e.g. avg_commute_minutes, inflow_any_rate). Only apply aliases in the final outer SELECT. Do NOT invent new column names inside CTEs.
+26. META-QUESTIONS: If the user asks a conversational or meta-question about your capabilities, rules, or available data (e.g. "what can you do", "are you sure", "list your views"), DO NOT write SQL. Return {{"mode": "clarify", "explanation": "A direct, polite conversational response answering their question."}}
 
 OUTPUT FORMAT:
 First, think step-by-step (briefly):
