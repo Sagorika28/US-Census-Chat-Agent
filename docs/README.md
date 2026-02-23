@@ -128,7 +128,7 @@ source .venv/bin/activate
 python tools/run_evals.py tests/eval_set.csv
 ```
 
-Latest results: **103/108 scored questions passed (95.3%)**, average latency ~6.4s per question. 4 multi-turn context tests are skipped (require conversation state).
+Average latency ~6.4s per question. 4 multi-turn context tests are skipped (require conversation state).
 
 ## Production upgrade path
 
