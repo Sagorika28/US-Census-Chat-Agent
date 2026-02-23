@@ -77,7 +77,7 @@ def _run_llm_path(user_msg: str, year: int):
 
     mode = result.get("mode", "sql")
     if mode == "refuse":
-        return "refuse", None, None, None, {"llm_response": result, "sql_gen_sec": sql_gen_time}
+        return "refuse", None, None, result.get("explanation"), {"llm_response": result, "sql_gen_sec": sql_gen_time}
     if mode == "clarify":
         return "clarify", None, None, result.get("explanation", "Can you be more specific?"), {"llm_response": result, "sql_gen_sec": sql_gen_time}
 
@@ -553,7 +553,7 @@ if user_msg:
                     status, df, sql, view, debug_info = _execute_query(user_msg, year)
 
                 if status == "refuse":
-                    reply = "I can't help with that request."
+                    reply = view or "I can't help with that request."
                     st.markdown(reply)
                     _show_debug(debug_info)
                     append_message("assistant", reply)
