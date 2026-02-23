@@ -128,7 +128,7 @@ source .venv/bin/activate
 python tools/run_evals.py tests/eval_set.csv
 ```
 
-Average latency ~6.4s per question. 4 multi-turn context tests are skipped (require conversation state).
+Average latency ~6.4s per question (on local environment). 
 
 ## Production upgrade path
 
