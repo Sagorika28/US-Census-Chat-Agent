@@ -113,7 +113,9 @@ python -m pytest tests/ -v
 
 ## Automated Evaluation
 
-An automated eval runner (`tools/run_evals.py`) tests the full pipeline against 112 questions across categories:
+An automated eval runner (`tools/run_evals.py`) tests the full pipeline against 112 questions across categories. **Note:** This is a deterministic *heuristic* evaluator that checks if the generated SQL/text contains the expected columns, views, and values for a given question type. It is not a quality checker.
+
+Categories tested:
 - **Easy** (20): single-hop queries directly supported by views
 - **Medium** (20): filters, ordering, year follow-ups
 - **Hard** (20): compound JOINs, multi-constraint, ambiguous geography
