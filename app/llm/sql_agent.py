@@ -21,7 +21,7 @@ AVAILABLE VIEWS (you may ONLY use these views and columns):
 -- Rent burden (county-level, 2019 + 2020)
 VIEW: {APP_DB}.{APP_SCHEMA}.V_RENT_BINS_COUNTY_{{YEAR}}
 COLUMNS: STATE, COUNTY, computed_renters, lt_10, p10_14, p15_19, p20_24, p25_29, p30_34, p35_39, p40_49, p50_plus, pct_over_30, pct_over_40
-DESCRIPTION: Rent-to-income burden by county. pct_over_30 = share of computed renters paying 30%+ of income on rent. pct_over_40 = share paying 40%+. Each p*_* column is a count of renters in that bin.
+DESCRIPTION: Rent-to-income burden by county. pct_over_30 = share of computed renters paying 30%+ of income on rent. pct_over_40 = share paying 40%+. Each p*_* column is a count of renters in that bin. ALWAYS alias pct_over_30 as "% Paying >=30% Income on Rent" and pct_over_40 as "% Paying >=40% Income on Rent".
 
 -- Commute (state-level, 2019 + 2020)
 VIEW: {APP_DB}.{APP_SCHEMA}.V_COMMUTE_STATE_{{YEAR}}

@@ -58,6 +58,11 @@ SQL USED: {sql_used}
 RESULTS (top rows):
 {results_text}
 
+COLUMN DEFINITIONS & RULES:
+- `pct_over_30`: The share or percentage of renters paying >= 30% of their income on rent.
+- `pct_over_40`: The share or percentage of renters paying >= 40% of their income on rent.
+- CRITICAL RULE: NEVER interpret "over 30" or "over 40" as age. It ALWAYS refers to the percentage of income spent on housing.
+
 Write a response with:
 1. A 1-2 sentence direct answer to the question in the first sentence, including the year and the metric used (e.g., pct_over_30, avg_commute_minutes, inflow_any_total). Cite specific numbers.
 2. A short bullet list of 3-5 key findings from the data.
