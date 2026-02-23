@@ -531,10 +531,15 @@ if user_msg:
         # D) Main path: LLM SQL Agent with fallback
         if explicit_year is None and year_mode == "single":
             year = DEFAULT_YEAR
-            year_note = (
-                "Using 2020 (latest available). "
-                "I can also show 2019 if you want."
-            )
+            
+            # Prevent offering 2019 for topics that only exist in the 2020 views
+            if route_topic in ["population", "tenure", "labor", "race", "hispanic", "education"]:
+                year_note = "Using 2020 (latest available)."
+            else:
+                year_note = (
+                    "Using 2020 (latest available). "
+                    "I can also show 2019 if you want."
+                )
         elif year_mode == "single":
             year = explicit_year
             year_note = f"Using {year}."
