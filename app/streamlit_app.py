@@ -76,10 +76,12 @@ def _run_llm_path(user_msg: str, year: int):
     sql_gen_time = time.time() - t0
 
     mode = result.get("mode", "sql")
+    llm_year_mode = result.get("year_mode", "single")
+    
     if mode == "refuse":
-        return "refuse", None, None, result.get("explanation"), {"llm_response": result, "sql_gen_sec": sql_gen_time}
+        return "refuse", None, None, result.get("explanation"), llm_year_mode, {"llm_response": result, "sql_gen_sec": sql_gen_time}
     if mode == "clarify":
-        return "clarify", None, None, result.get("explanation", "Can you be more specific?"), {"llm_response": result, "sql_gen_sec": sql_gen_time}
+        return "clarify", None, None, result.get("explanation", "Can you be more specific?"), llm_year_mode, {"llm_response": result, "sql_gen_sec": sql_gen_time}
 
     sql = result.get("sql", "")
     llm_year = result.get("year", year)
@@ -94,7 +96,7 @@ def _run_llm_path(user_msg: str, year: int):
     df = run_query(session, sql)
     query_exec_time = time.time() - t1
 
-    return "ok", df, sql, view, {
+    return "ok", df, sql, view, llm_year_mode, {
         "llm_response": result, "sql": sql, "explanation": explanation,
         "sql_gen_sec": sql_gen_time, "query_exec_sec": query_exec_time,
     }
@@ -114,7 +116,7 @@ def _run_fallback_path(user_msg: str, year: int):
     sql, src_view, src_cols = compile_sql(spec, year)
     validate_sql(sql, year)
     df = run_query(session, sql)
-    return df, sql, src_view, spec
+    return df, sql, src_view, spec, "single"
 
 
 def _execute_query(user_msg: str, year: int):
@@ -124,11 +126,11 @@ def _execute_query(user_msg: str, year: int):
     """
     debug_info = {"path": "llm", "errors": []}
     try:
-        status, df, sql, view, llm_debug = _run_llm_path(user_msg, year)
+        status, df, sql, view, llm_year_mode, llm_debug = _run_llm_path(user_msg, year)
         debug_info.update(llm_debug)
         if status in ("refuse", "clarify"):
-            return status, None, None, view, debug_info
-        return "ok", df, sql, view, debug_info
+            return status, None, None, view, llm_year_mode, debug_info
+        return "ok", df, sql, view, llm_year_mode, debug_info
     except Exception as llm_err:
         debug_info["path"] = "fallback"
         debug_info["llm_error"] = f"{type(llm_err).__name__}: {llm_err}"
@@ -136,10 +138,10 @@ def _execute_query(user_msg: str, year: int):
         debug_info["errors"].append(f"LLM path failed: {llm_err}")
         # LLM failed -- use deterministic fallback (simpler query)
         try:
-            df, sql, src_view, spec = _run_fallback_path(user_msg, year)
+            df, sql, src_view, spec, fb_year_mode = _run_fallback_path(user_msg, year)
             debug_info["fallback_sql"] = sql
             debug_info["fallback_spec"] = str(spec)
-            return "fallback", df, sql, src_view, debug_info
+            return "fallback", df, sql, src_view, fb_year_mode, debug_info
         except Exception as fb_err:
             debug_info["fallback_error"] = f"{type(fb_err).__name__}: {fb_err}"
             debug_info["fallback_traceback"] = traceback.format_exc()
@@ -550,7 +552,12 @@ if user_msg:
                 append_message("assistant", combined)
             else:
                 with st.spinner("Thinking..."):
-                    status, df, sql, view, debug_info = _execute_query(user_msg, year)
+                    status, df, sql, view, llm_year_mode, debug_info = _execute_query(user_msg, year)
+
+                # If the LLM organically decided to write a cross-year CTE comparison,
+                # override the UI header to show it is a comparison, instead of "Using 2020."
+                if llm_year_mode == "compare":
+                    year_note = "Showing both 2019 and 2020 (comparison)."
 
                 if status == "refuse":
                     reply = view or "I can't help with that request."
