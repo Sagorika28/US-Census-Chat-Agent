@@ -6,6 +6,8 @@ A chat-based agent that answers US Census questions using the Snowflake Marketpl
 
 This app is deployed as a **Streamlit app inside Snowflake** (no local setup required).
 
+https://github.com/user-attachments/assets/9fce328c-e3a9-409c-bde8-a6bb15b47f92
+
 ### Use the viewer login provided
 
 1) Log in to Snowflake using: 
